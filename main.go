@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+
+	"github.com/alecthomas/chroma/quick"
 )
 
 func main() {
@@ -21,15 +24,23 @@ func main() {
 }
 
 func sourceCodeHandler(w http.ResponseWriter, r *http.Request) {
-	path := r.FormValue("path")
-	// path := "D:\\Gophercises\\recovery\\main.go"
-	file, err := os.Open(path)
+	// _ = r.FormValue("path")
+	testpath := "D:\\Gophercises\\recovery\\main.go"
+	file, err := os.Open(testpath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	_, err = io.Copy(w, file)
+	b := bytes.NewBuffer(nil)
+	_, err = io.Copy(b, file)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err  = quick.Highlight(w, b.String(), "go", "html", "monokai")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
