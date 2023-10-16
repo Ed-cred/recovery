@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime/debug"
 )
 
@@ -14,7 +16,21 @@ func main() {
 	mux.HandleFunc("/panic/", panicDemo)
 	mux.HandleFunc("/panic-after/", panicAfterDemo)
 	mux.HandleFunc("/", hello)
+	mux.HandleFunc("/debug/", sourceCodeHandler)
 	log.Fatal(http.ListenAndServe(":3000", recoverMw(mux, true)))
+}
+
+func sourceCodeHandler(w http.ResponseWriter, r *http.Request) {
+	path := r.FormValue("path")
+	// path := "D:\\Gophercises\\recovery\\main.go"
+	file, err := os.Open(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	_, err = io.Copy(w, file)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func recoverMw(app http.Handler, dev bool) http.HandlerFunc {
