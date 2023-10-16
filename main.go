@@ -8,8 +8,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/alecthomas/chroma/quick"
 )
@@ -24,9 +26,9 @@ func main() {
 }
 
 func sourceCodeHandler(w http.ResponseWriter, r *http.Request) {
-	// _ = r.FormValue("path")
-	testpath := "D:\\Gophercises\\recovery\\main.go"
-	file, err := os.Open(testpath)
+	path := r.FormValue("path")
+	// testpath := "D:\\Gophercises\\recovery\\main.go"
+	file, err := os.Open(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -37,11 +39,7 @@ func sourceCodeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	err  = quick.Highlight(w, b.String(), "go", "html", "monokai")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	_ = quick.Highlight(w, b.String(), "go", "html", "monokai")
 }
 
 func recoverMw(app http.Handler, dev bool) http.HandlerFunc {
@@ -56,7 +54,7 @@ func recoverMw(app http.Handler, dev bool) http.HandlerFunc {
 					return
 				}
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "<h1>panic: %v</h1><pre>%s</pre>", err, string(stack))
+				fmt.Fprintf(w, "<h1>panic: %v</h1><pre>%s</pre>", err, makeLinks(string(stack)))
 
 			}
 		}()
@@ -131,4 +129,52 @@ func funcThatPanics() {
 
 func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "<h1>Hello!</h1>")
+}
+// goroutine 12 [running]:
+// runtime/debug.Stack()
+// 	C:/Program Files/Go/src/runtime/debug/stack.go:24 +0x65
+// main.recoverMw.func1.1()
+// 	D:/Gophercises/recovery/main.go:52 +0x8a
+// panic({0x78b740, 0x964380})
+// 	C:/Program Files/Go/src/runtime/panic.go:884 +0x213
+// main.funcThatPanics(...)
+// 	D:/Gophercises/recovery/main.go:129
+// main.panicDemo({0x7c3e60?, 0x0?}, 0x1f85f1431d8?)
+// 	D:/Gophercises/recovery/main.go:120 +0x27
+// net/http.HandlerFunc.ServeHTTP(0xc000080000?, {0x966f00?, 0xc00026a090?}, 0xc0005bba10?)
+// 	C:/Program Files/Go/src/net/http/server.go:2122 +0x2f
+// net/http.(*ServeMux).ServeHTTP(0x35de46?, {0x966f00, 0xc00026a090}, 0xc000296300)
+// 	C:/Program Files/Go/src/net/http/server.go:2500 +0x149
+// main.recoverMw.func1({0x9670e0?, 0xc0002a8000}, 0x7ac9e0?)
+// 	D:/Gophercises/recovery/main.go:64 +0xf9
+// net/http.HandlerFunc.ServeHTTP(0x0?, {0x9670e0?, 0xc0002a8000?}, 0x3030d3?)
+// 	C:/Program Files/Go/src/net/http/server.go:2122 +0x2f
+// net/http.serverHandler.ServeHTTP({0xc0001de060?}, {0x9670e0, 0xc0002a8000}, 0xc000296300)
+// 	C:/Program Files/Go/src/net/http/server.go:2936 +0x316
+// net/http.(*conn).serve(0xc000160240, {0x967378, 0xc0001df470})
+// 	C:/Program Files/Go/src/net/http/server.go:1995 +0x612
+// created by net/http.(*Server).Serve
+// 	C:/Program Files/Go/src/net/http/server.go:3089 +0x5ed
+func makeLinks(trace string) string {
+	lines := strings.Split(trace, "\n")
+	for li, line := range lines {
+		if len(line) == 0 || line[0] != '\t' {
+			continue
+		}
+		file := ""
+		count := 0
+		for i, ch := range line {
+			if ch == ':' {
+				count += 1
+				if count > 1 {
+					file = line[1:i]
+					break
+				}
+			}
+		}
+		v := url.Values{}
+		v.Set("path", file)
+		lines[li] = "\t<a href=\"/debug/?path=" + v.Encode() + "\">" + file + "</a>" + line[len(file)+1:]
+	}
+	return strings.Join(lines, "\n")
 }
